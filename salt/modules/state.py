@@ -417,6 +417,15 @@ def show_top():
                         ret[env][match].extend(top_[env][match])
     return ret
 
+
+def show_top_matches():
+        st_ = salt.state.HighState(__opts__)
+    top = st_.get_top()
+    top_matches = st_.top_matches(top)
+
+    return {'top_matches': top_matches}
+
+
 # Just commenting out, someday I will get this working
 #def show_masterstate():
 #    '''
