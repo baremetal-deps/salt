@@ -57,9 +57,6 @@ Package repositories can be managed with the pkgrepo state:
     once ``python-software-properties`` is installed.
 '''
 
-# Import salt libs
-from salt.modules.apt import _strip_uri
-
 
 def __virtual__():
     '''
@@ -230,9 +227,7 @@ def managed(name, **kwargs):
     # out of the state itself and into a module that it makes more sense
     # to use.  Most package providers will simply return the data provided
     # it doesn't require any "specialized" data massaging.
-    sanitizedkwargs = __salt__['pkg.expand_repo_def'](kwargs)
-    if __grains__['os_family'] == 'Debian':
-        kwargs['repo'] = _strip_uri(kwargs['repo'])
+    sanitizedkwargs = __salt__['pkg.expand_repo_def'](repokwargs)
 
     if repo:
         notset = False
@@ -257,8 +252,7 @@ def managed(name, **kwargs):
                     notset = True
         if notset is False:
             ret['result'] = True
-            ret['comment'] = ('Package repo {0!r} already configured'
-                              .format(name))
+            ret['comment'] = 'Package repo {0} already configured'.format(name)
             return ret
     if __opts__['test']:
         ret['comment'] = ('Package repo {0!r} will be configured. This may '
@@ -273,8 +267,8 @@ def managed(name, **kwargs):
         # This is another way to pass information back from the mod_repo
         # function.
         ret['result'] = False
-        ret['comment'] = ('Failed to configure repo {0!r}: {1}'
-                          .format(name, str(e)))
+        ret['comment'] = 'Failed to configure repo "{0}": {1}'.format(name,
+                                                                      str(e))
         return ret
     try:
         repodict = __salt__['pkg.get_repo'](repokwargs['repo'],
@@ -290,10 +284,10 @@ def managed(name, **kwargs):
             ret['changes'] = {'repo': repokwargs['repo']}
 
         ret['result'] = True
-        ret['comment'] = 'Configured package repo {0!r}'.format(name)
+        ret['comment'] = 'Configured package repo {0}'.format(name)
     except Exception as e:
         ret['result'] = False
-        ret['comment'] = 'Failed to confirm config of repo {0!r}: {1}'.format(
+        ret['comment'] = 'Failed to confirm config of repo {0}: {1}'.format(
             name, str(e))
     return ret
 

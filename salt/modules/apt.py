@@ -795,8 +795,8 @@ def list_repos():
         repo['disabled'] = source.disabled
         repo['dist'] = source.dist
         repo['type'] = source.type
-        repo['uri'] = source.uri.rstrip('/')
-        repo['line'] = _strip_uri(source.line.strip())
+        repo['uri'] = source.uri
+        repo['line'] = source.line.strip()
         repo['architectures'] = getattr(source, 'architectures', [])
         repos.setdefault(source.uri, []).append(repo)
     return repos
@@ -815,9 +815,8 @@ def get_repo(repo, **kwargs):
         salt '*' pkg.get_repo "myrepo definition"
     '''
     if not apt_support:
-        raise CommandExecutionError(
-            'Error: aptsources.sourceslist python module not found'
-        )
+        msg = 'Error: aptsources.sourceslist python module not found'
+        raise Exception(msg)
 
     ppa_auth = kwargs.get('ppa_auth', None)
     # we have to be clever about this since the repo definition formats
@@ -852,10 +851,8 @@ def get_repo(repo, **kwargs):
                                                        ppa_auth,
                                                        uri_match.group(2))
         except SyntaxError:
-            raise CommandExecutionError(
-                'Error: repo {0!r} is not a well formatted definition'
-                .format(repo)
-            )
+            error_str = 'Error: repo {0!r} is not a well formatted definition'
+            raise Exception(error_str.format(repo))
 
         for source in repos.values():
             for sub in source:
@@ -870,7 +867,7 @@ def get_repo(repo, **kwargs):
                         if comp in sub.get('comps', []):
                             return sub
 
-    raise CommandExecutionError('repo {0!r} was not found'.format(repo))
+    raise Exception('repo {0!r} was not found'.format(repo))
 
 
 def del_repo(repo, **kwargs):
@@ -1038,7 +1035,7 @@ def mod_repo(repo, **kwargs):
                               'Expected format "<PPA_OWNER>/<PPA_NAME>" ' \
                               '(e.g. saltstack/salt) not found.  Received ' \
                               '{0!r} instead.'
-                    raise CommandExecutionError(err_str.format(repo[4:]))
+                    raise Exception(err_str.format(repo[4:]))
                 dist = __grains__['lsb_distrib_codename']
                 # ppa has a lot of implicit arguments. Make them explicit.
                 # These will defer to any user-defined variants
@@ -1058,21 +1055,17 @@ def mod_repo(repo, **kwargs):
                         if 'keyid' not in kwargs:
                             error_str = 'Private PPAs require a ' \
                                         'keyid to be specified: {0}/{1}'
-                            raise CommandExecutionError(
-                                error_str.format(owner_name, ppa_name)
-                            )
+                            raise Exception(error_str.format(owner_name,
+                                                             ppa_name))
                 except urllib2.HTTPError as exc:
                     error_str = 'Launchpad does not know about {0}/{1}: {2}'
-                    raise CommandExecutionError(
-                        error_str.format(owner_name, ppa_name, exc)
-                    )
+                    raise Exception(error_str.format(owner_name, ppa_name,
+                                                     exc))
                 except IndexError as e:
                     error_str = 'Launchpad knows about {0}/{1} but did not ' \
                                 'return a fingerprint. Please set keyid ' \
                                 'manually: {2}'
-                    raise CommandExecutionError(
-                        error_str.format(owner_name, ppa_name, e)
-                    )
+                    raise Exception(error_str.format(owner_name, ppa_name, e))
 
                 if 'keyserver' not in kwargs:
                     kwargs['keyserver'] = 'keyserver.ubuntu.com'
@@ -1080,7 +1073,7 @@ def mod_repo(repo, **kwargs):
                     if not launchpad_ppa_info['private']:
                         error_str = 'PPA is not private but auth ' \
                                     'credentials passed: {0}'
-                        raise CommandExecutionError(error_str.format(repo))
+                        raise Exception(error_str.format(repo))
                 # assign the new repo format to the "repo" variable
                 # so we can fall through to the "normal" mechanism
                 # here.
@@ -1091,10 +1084,8 @@ def mod_repo(repo, **kwargs):
                 else:
                     repo = LP_SRC_FORMAT.format(owner_name, ppa_name, dist)
         else:
-            raise CommandExecutionError(
-                'cannot parse "ppa:" style repo definitions: {0}'
-                .format(repo)
-            )
+            error_str = 'cannot parse "ppa:" style repo definitions: {0}'
+            raise Exception(error_str.format(repo))
 
     sources = sourceslist.SourcesList()
     if kwargs.get('consolidate', False):
@@ -1138,10 +1129,8 @@ def mod_repo(repo, **kwargs):
                 ret = __salt__['cmd.run_all'](cmd.format(ks, keyid),
                                               **kwargs)
                 if ret['retcode'] != 0:
-                    raise CommandExecutionError(
-                        'Error: key retrieval failed: {0}'
-                        .format(ret['stdout'])
-                    )
+                    error_str = 'Error: key retrieval failed: {0}'
+                    raise Exception(error_str.format(ret['stdout']))
 
     elif 'key_url' in kwargs:
         key_url = kwargs['key_url']
@@ -1149,9 +1138,8 @@ def mod_repo(repo, **kwargs):
         cmd = 'apt-key add {0}'.format(fn_)
         out = __salt__['cmd.run_stdout'](cmd, **kwargs)
         if not out.upper().startswith('OK'):
-            raise CommandExecutionError(
-                'Error: key retrieval failed: {0}'.format(cmd.format(key_url))
-            )
+            error_str = 'Error: key retrieval failed: {0}'
+            raise Exception(error_str.format(cmd.format(key_url)))
 
     if 'comps' in kwargs:
         kwargs['comps'] = kwargs['comps'].split(',')
@@ -1264,18 +1252,6 @@ def file_dict(*packages):
     return __salt__['lowpkg.file_dict'](*packages)
 
 
-def _strip_uri(repo):
-    '''
-    Remove the trailing slash from the URI in a repo definition
-    '''
-    splits = repo.split()
-    for idx in xrange(len(splits)):
-        if any(splits[idx].startswith(x)
-               for x in ('http://', 'https://', 'ftp://')):
-            splits[idx] = splits[idx].rstrip('/')
-    return ' '.join(splits)
-
-
 def expand_repo_def(repokwargs):
     '''
     Take a repository definition and expand it to the full pkg repository dict
@@ -1287,11 +1263,10 @@ def expand_repo_def(repokwargs):
     sanitized = {}
 
     if not apt_support:
-        raise CommandExecutionError(
-            'Error: aptsources.sourceslist python module not found'
-        )
+        msg = 'Error: aptsources.sourceslist python module not found'
+        raise Exception(msg)
 
-    repo = _strip_uri(repokwargs['repo'])
+    repo = repokwargs['repo']
 
     if repo.startswith('ppa:') and __grains__['os'] == 'Ubuntu':
         dist = __grains__['lsb_distrib_codename']
@@ -1322,7 +1297,7 @@ def expand_repo_def(repokwargs):
     sanitized['disabled'] = source_entry.disabled
     sanitized['dist'] = source_entry.dist
     sanitized['type'] = source_entry.type
-    sanitized['uri'] = source_entry.uri.rstrip('/')
+    sanitized['uri'] = source_entry.uri
     sanitized['line'] = source_entry.line.strip()
     sanitized['architectures'] = getattr(source_entry, 'architectures', [])
 
